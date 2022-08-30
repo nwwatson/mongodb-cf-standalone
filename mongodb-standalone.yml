@@ -1,0 +1,422 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template is used for setting up a single mongodb node.
+Parameters:
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC-ID of your existing Virtual Private Cloud (VPC) where you want
+      to depoy MongoDB cluster.
+  
+  Iops:
+    Type: String
+    Description: Iops of EBS volume when io1 type is chosen. Otherwise ignored
+    Default: '100'
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: home
+    Description: Name of an existing EC2 KeyPair. MongoDB instances will launch with
+      this KeyPair.
+
+  LatestAmazonLinux2Id:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  MongoDBAdminUsername:
+    Default: admin
+    NoEcho: 'true'
+    Description: MongoDB admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric
+      characters.
+
+  MongoDBAdminPassword:
+    AllowedPattern: ([A-Za-z0-9_@-]{8,32})
+    ConstraintDescription: 'Input your MongoDB database password, Min 8, Maximum of
+      32 characters. . Allowed characters are: [A-Za-z0-9_@-]'
+    Description: Enter your MongoDB Database Password, Min 8, maximum of 32 characters.
+    NoEcho: 'true'
+    Type: String
+
+  MongoDBInstanceType:
+    Description: Amazon EC2 instance type for MongoDB.
+    Type: String
+    Default: m5.large
+    AllowedValues:
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.12xlarge
+      - m5.24xlarge
+      - r5.large
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r5.8xlarge
+      - r5.12xlarge
+      - r5.16xlarge
+      - r5.24xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+      - x1.16xlarge
+      - x1.32xlarge
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - i3.large
+      - i3.xlarge
+      - i3.2xlarge
+      - i3.4xlarge
+      - i3.8xlarge
+      - i3.16xlarge
+      - x1e.32xlarge
+      - x1e.16xlarge
+      - x1e.8xlarge
+      - x1e.4xlarge
+      - x1e.2xlarge
+      - x1e.xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+  
+  MongoDBSubnet:
+    Description: Subnet to create the MongoDB instance within
+    Type: String
+
+  MongoDBNameTag:
+    Description: Instance Name
+    Type: String
+  
+  VolumeSize:
+    Type: String
+    Description: EBS Volume Size (data) to be attached to node in GBs
+    Default: '25'
+
+  VolumeType:
+    Type: String
+    Description: EBS Volume Type (data) to be attached to node [io1,gp2]
+    Default: io1
+    AllowedValues:
+      - gp2
+      - io1
+
+Conditions:
+  UsePIops: !Equals
+    - !Ref 'VolumeType'
+    - io1
+
+Resources:
+  MongoDBNodeIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: mongodb-policy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:Describe*
+                  - ec2:AttachNetworkInterface
+                  - ec2:AttachVolume
+                  - ec2:CreateTags
+                  - ec2:CreateVolume
+                  - ec2:RunInstances
+                  - ec2:StartInstances
+                  - ec2:DeleteVolume
+                  - ec2:CreateSecurityGroup
+                  - ec2:CreateSnapshot
+                Resource: '*'
+  
+  MongoDBNodeIAMProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'MongoDBNodeIAMRole'
+
+  MongoDBServerAccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref 'VPC'
+      GroupDescription: Instances with access to MongoDB servers
+  
+  MongoDBServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref 'VPC'
+      GroupDescription: MongoDB server management and access ports
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref 'MongoDBServerAccessSecurityGroup'
+        - IpProtocol: tcp
+          FromPort: 27017
+          ToPort: 27030
+          SourceSecurityGroupId: !Ref 'MongoDBServerAccessSecurityGroup'
+        - IpProtocol: tcp
+          FromPort: 28017
+          ToPort: 28017
+          SourceSecurityGroupId: !Ref 'MongoDBServerAccessSecurityGroup'
+
+  MongoDBServersSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref 'VPC'
+      GroupDescription: MongoDB inter-server communication and management ports
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref 'MongoDBServerSecurityGroup'
+        - IpProtocol: tcp
+          FromPort: 27017
+          ToPort: 27030
+          SourceSecurityGroupId: !Ref 'MongoDBServerSecurityGroup'
+        - IpProtocol: tcp
+          FromPort: 28017
+          ToPort: 28017
+          SourceSecurityGroupId: !Ref 'MongoDBServerSecurityGroup'
+
+  MongoDBNetworkInterface:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      Description: Network Interface for Mongo Node
+      SubnetId: !Ref 'MongoDBSubnet'
+      GroupSet:
+        - !Ref 'MongoDBServerSecurityGroup'
+        - !Ref 'MongoDBServersSecurityGroup'
+      SourceDestCheck: true
+      Tags:
+        - Key: Network
+          Value: Private
+  
+  MongoDBNode:
+    Type: AWS::EC2::Instance
+    Properties:
+      NetworkInterfaces:
+        - NetworkInterfaceId: !Ref 'MongoDBNetworkInterface'
+          DeviceIndex: '0'
+      KeyName: !Ref 'KeyName'
+      ImageId: !Ref 'LatestAmazonLinux2Id'
+      IamInstanceProfile: !Ref 'MongoDBNodeIAMProfile'
+      Tags:
+        - Key: Name
+          Value: !Ref 'MongoDBNameTag'
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvdf
+          Ebs:
+            VolumeSize: !Ref 'VolumeSize'
+            VolumeType: !Ref 'VolumeType'
+            Iops: !If
+              - UsePIops
+              - !Ref 'Iops'
+              - !Ref 'AWS::NoValue'
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        "Fn::Base64": !Sub |
+          #!/bin/bash
+
+          #################################################################
+          # Make filesystems, set ulimits and block read ahead on ALL nodes
+          #################################################################
+          mkfs.xfs -f /dev/xvdf
+          echo "/dev/xvdf /data xfs defaults,auto,noatime,noexec 0 0" | tee -a /etc/fstab
+          mkdir -p /data
+          mount /data
+          chown -R mongod:mongod /data
+          blockdev --setra 32 /dev/xvdf
+
+          cat << 'ENDCONF' | tee /etc/init.d/disable-transparent-hugepages
+          #!/bin/bash
+          ### BEGIN INIT INFO
+          # Provides:
+          # Required-Start:
+          # Required-Stop:
+          # X-Start-Before:
+          # Default-Start:
+          # Default-Stop:
+          # Short-Description: Disable Linux transparent huge pages
+          # Description:       Disable Linux transparent huge pages, to improve
+          #                    database performance.
+          ### END INIT INFO
+          case $1 in
+            start)
+              if [ -d /sys/kernel/mm/transparent_hugepage ]; then
+                thp_path=/sys/kernel/mm/transparent_hugepage
+              elif [ -d /sys/kernel/mm/redhat_transparent_hugepage ]; then
+                thp_path=/sys/kernel/mm/redhat_transparent_hugepage
+          else return 0
+          fi
+              echo 'never' > ${!thp_path}/enabled
+              echo 'never' > ${!thp_path}/defrag
+              re='^[0-1]+$'
+              if [[ $(cat ${!thp_path}/khugepaged/defrag) =~ $re ]]
+              then
+                # RHEL 7
+                echo 0  > ${!thp_path}/khugepaged/defrag
+              else
+                # RHEL 6
+                echo 'no' > ${!thp_path}/khugepaged/defrag
+              fi
+              #Set Readahead for Data Disk
+              blockdev --setra 8 /dev/xvdf
+              unset re
+              unset thp_path
+          ;; esac
+          ENDCONF
+
+          chmod 755 /etc/init.d/disable-transparent-hugepages
+
+          /etc/init.d/disable-transparent-hugepages start
+
+          echo "vm.zone_reclaim_mode=0" | tee --append /etc/sysctl.conf
+          sysctl -w  vm.zone_reclaim_mode=0
+
+          echo "vm.swappiness=1" | tee --append /etc/sysctl.conf
+          sysctl -w  vm.swappiness=1
+
+          for limit in fsize cpu as memlock
+          do
+            grep "mongodb" /etc/security/limits.conf | grep -q $limit || echo -e "mongod     hard   $limit    unlimited\nmongod     soft    $limit unlimited" | sudo tee --append /etc/security/limits.conf
+          done
+
+          for limit in nofile noproc
+          do
+            grep "mongodb" /etc/security/limits.conf | grep -q $limit || echo -e "mongod hard $limit 64000\nmongod soft $limit 64000"| sudo tee --append /etc/security/limits.conf
+          done
+
+          yum update -y
+
+          ## Install Dependencies
+          yum install -y install \
+                  cyrus-sasl \
+                  cyrus-sasl-gssapi \
+                  cyrus-sasl-plain \
+                  krb5-libs \
+                  libcurl \
+                  net-snmp \
+                  net-snmp-libs \
+                  openldap \
+                  openssl \
+                  xz-libs
+
+          ## Install MongoDB Enterprise
+          cat << 'ENDCONF' | tee /etc/yum.repos.d/mongodb-enterprise-5.0.repo
+          [mongodb-org-5.0]
+          name=MongoDB Repository
+          baseurl=https://repo.mongodb.org/yum/amazon/2/mongodb-org/5.0/x86_64/
+          gpgcheck=1
+          enabled=1
+          gpgkey=https://www.mongodb.org/static/pgp/server-5.0.asc
+          ENDCONF
+
+          yum install -y mongodb-org
+
+          cat << 'ENDCONF' | tee /etc/mongod.conf
+          # mongod.conf
+          # for documentation of all options, see:
+          #   http://docs.mongodb.org/manual/reference/configuration-options/
+          # where to write logging data.
+          systemLog:
+            destination: file
+            logAppend: true
+            path: /data/logs/mongod.log
+
+          # Where and how to store data.
+          storage:
+            dbPath: /data/db
+            journal:
+              enabled: true
+
+          # how the process runs
+          processManagement:
+            fork: true  # fork and run in background
+            pidFilePath: /var/run/mongodb/mongod.pid  # location of pidfile
+            timeZoneInfo: /usr/share/zoneinfo
+          # network interfaces
+          net:
+            port: 27017
+            bindIp: 0.0.0.0  # Enter 0.0.0.0,:: to bind to all IPv4 and IPv6 addresses or, alternatively, use the net.bindIpAll setting.
+          
+          security:
+            authorization: enabled
+
+          ENDCONF
+
+          chown mongod:mongod /etc/mongod.conf
+
+          mkdir /data/db
+          chown mongod:mongod /data/db
+          mkdir /data/logs
+          chown mongod:mongod /data/logs
+
+          systemctl emable mongod
+
+          systemctl start mongod
+
+          mongo --port 27017 << EOF
+          use admin;
+          db.createUser(
+            {
+              user: "${MongoDBAdminUsername}",
+              pwd: "${MongoDBAdminPassword}",
+              roles: [ { role: "root", db: "admin" } ]
+            }
+          );
+          EOF
+      InstanceType: !Ref 'MongoDBInstanceType'
+
+Outputs:
+  NodePrivateIp:
+    Value: !GetAtt 'MongoDBNode.PrivateIp'
+    Description: Private IP Address of Node Instance
+  NodeInstanceID:
+    Description: The Instance ID
+    Value: !Ref 'MongoDBNode'
+  NodeNameTag:
+    Description: Node Name Tag
+    Value: !Ref 'MongoDBNameTag'

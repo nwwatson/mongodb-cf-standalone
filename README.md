@@ -31,6 +31,7 @@ To use this script you will need to provide the following:
 ## Example Script
 
 ```shell
+export STACK_NAME=<YOUR STACK NAME>
 export AWS_VPC=<YOUR VPC ID>
 export AWS_KEY_NAME=<YOUR KEY PAIR NAME>
 export AWS_INSTANCE_TYPE=<YOUR INSTANCE TYPE>
@@ -38,7 +39,7 @@ export AWS_SUBNET=<YOUR SUBNET INSIDE YOUR VPC>
 export MONGODB_NODE_NAME=<YOUR NODE NAME>
 export MONGODB_ADMIN_PASSWORD=<YOUR PASSWORD>
 
-aws cloudformation deploy --stack-name mongodb-nww \
+aws cloudformation deploy --stack-name $STACK_NAME \
   --template-file mongodb-standalone.yml \
   --parameter-overrides VPC=$AWS_VPC \
       KeyName=$AWS_KEY_NAME \
