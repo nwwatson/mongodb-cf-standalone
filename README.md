@@ -3,12 +3,13 @@
 This repository contains AWS CloudFormation scripts which will launch
 a standalone MongoDB Community Edition 5.X server. This script has the [Production Notes](https://www.mongodb.com/docs/v5.0/administration/production-notes/) applied. 
 
-## Features
+## Notes
 
 * Authentication has been enabled
 * Creates and encrypted data volume and mounts it in XFS format mounted
 * MongoDB Data are stored at `/data/db`
 * MongoDB Logs are stored at `/data/logs`
+* Binds to all IP Addresses
 
 ## Parameters
 
