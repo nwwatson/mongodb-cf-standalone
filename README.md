@@ -16,8 +16,8 @@ a standalone MongoDB Community Edition 5.X server. This script has the [Producti
 To use this script you will need to provide the following:
 
 * **VPC**: VPC-ID of your existing Virtual Private Cloud (VPC) where you want to depoy MongoDB cluster.
-* **MongoDBSubnet**: A subnet within your VPC that wou want do deploy to. These can be found within the VPC section of AWS.
-* **KeyName**:  Name of an existing EC2 KeyPair. The MongoDB Community Edition instance will launch with this KeyPair.
+* **MongoDBSubnet**: A subnet within your VPC that you want to deploy to. These can be found within the VPC section of AWS.
+* **KeyName**: The name of an existing EC2 KeyPair. This can be found/created in the EC2 section of the AWS console.
 * **MongoDBInstanceType**: Amazon EC2 instance type for the MongoDB Instance. Default is `m5.large`
 * **MongoDBAdminPassword**: The password for the initial MongoDB User.
 * **MongoDBNameTag**: The name for your MongoDB Instance
