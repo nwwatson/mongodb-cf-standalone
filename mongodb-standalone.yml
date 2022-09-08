@@ -43,7 +43,7 @@ Parameters:
   MongoDBInstanceType:
     Description: Amazon EC2 instance type for MongoDB.
     Type: String
-    Default: m5.large
+    Default: t3.large
     AllowedValues:
       - m5.large
       - m5.xlarge
